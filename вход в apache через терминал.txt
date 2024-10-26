@@ -1,0 +1,6 @@
+cd c:\Apache24\bin
+.\httpd.exe
+httpd.conf
+75
+php.ini-development
+936
