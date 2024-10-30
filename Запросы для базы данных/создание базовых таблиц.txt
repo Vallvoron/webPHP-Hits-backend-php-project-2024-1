@@ -1,0 +1,77 @@
+Пациенты:
+CREATE TABLE patient(
+id VARCHAR(100) PRIMARY KEY,
+name VARCHAR(50),
+birthday timestamp,
+gender VARCHAR(50),
+createTime timestamp
+)
+Специальность:
+CREATE TABLE speciality (
+id VARCHAR(100) PRIMARY KEY,
+name VARCHAR(100),
+createTime timestamp
+)
+
+Доктора:
+CREATE TABLE doctor(
+id VARCHAR(100) PRIMARY KEY,
+createTime timestamp,
+name VARCHAR(50),
+password VARCHAR(50),
+email VARCHAR(50),
+birthday timestamp,
+gender VARCHAR(50),
+phone VARCHAR(50),
+speciality VARCHAR(100),
+FOREIGN KEY (speciality) REFERENCES speciality(id),
+token VARCHAR(100)
+)
+
+Осмотр:CREATE TABLE inspection(
+id VARCHAR(100) PRIMARY KEY,
+createTime timestamp,
+patientID VARCHAR(100),
+FOREIGN KEY (patientId) REFERENCES patient(id),
+date timestamp,
+anamnesis VARCHAR(100),
+complaints VARCHAR(100),
+treatment VARCHAR(100),
+conclusion VARCHAR(50),
+nextVisitDate timestamp,
+deathDate timestamp,
+previousInspectionId VARCHAR(100),
+FOREIGN KEY (previousInspectionId) REFERENCES inspection(id),
+author VARCHAR(100),
+FOREIGN KEY (author) REFERENCES doctor(id)
+)
+Диагноз:
+CREATE TABLE diagnos (
+id VARCHAR(100) PRIMARY KEY,
+icdDiagnosisId INT,
+FOREIGN KEY (icdDiagnosisID) REFERENCES icd10,
+inspectionId VARCHAR(100),
+FOREIGN KEY (inspectionId) REFERENCES inspection(id),
+description VARCHAR(100),
+type VARCHAR(100),
+createTime timestamp
+)
+Консультацию:
+CREATE TABLE consultation(
+id VARCHAR(100) PRIMARY KEY,
+inspectionID VARCHAR(100),
+FOREIGN KEY (inspectionId) REFERENCES inspection(id),
+specialityId VARCHAR(100),
+FOREIGN KEY (specialityId) REFERENCES speciality(id),
+createTime timestamp
+)
+Коментарий:
+CREATE TABLE coment(
+id VARCHAR(100) PRIMARY KEY,
+ConsultationID VARCHAR(100),
+FOREIGN KEY (ConsultationId) REFERENCES Consultation(id),
+author VARCHAR(100),
+FOREIGN KEY (author) REFERENCES doctor(id),
+content text,
+createTime timestamp
+)

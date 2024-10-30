@@ -11,7 +11,7 @@ try {
     die("Ошибка подключения к базе данных: " . $e->getMessage());
 }
 
-// Получение параметров запроса
+if ($_SERVER['REQUEST_URI'] === '/api/dictionary.php/icd10') {// Получение параметров запроса
 $name = $_GET['name'];
 $page = $_GET['page'];
 $size = $_GET['size'];
@@ -64,7 +64,19 @@ $response = [
 // Вывод результата
 header('Content-Type: application/json');
 echo json_encode($response);
-
+}
+else if ($_SERVER['REQUEST_URI'] === '/api/dictionary.php/icd10/roots')
+{
+    $stmt = $pdo->prepare('SELECT * FROM icd10 WHERE ID_PARENT IS NULL;');
+    $stmt->execute();
+    $roots = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    echo json_encode($roots);
+}
+else {
+    // Отправка ответа с ошибкой
+    http_response_code(401);
+    echo json_encode(["message" => "Метод не разрешен"]);
+}
 // Закрытие подключения
 $conn = null;
 ?>
