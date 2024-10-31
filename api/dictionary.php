@@ -11,13 +11,13 @@ try {
     die("Ошибка подключения к базе данных: " . $e->getMessage());
 }
 
-if ($_SERVER['REQUEST_URI'] === '/api/dictionary.php/icd10') {// Получение параметров запроса
-$name = $_GET['name'];
+if (strpos($_SERVER['REQUEST_URI'], '/api/dictionary.php/icd10')!== false) {// Получение параметров запроса
+$request = $_GET['request'];
 $page = $_GET['page'];
 $size = $_GET['size'];
 
 // Валидация параметров
-if (!isset($name) || !isset($page) || !isset($size) || !is_numeric($page) || !is_numeric($size)) {
+if (!isset($request) || !isset($page) || !isset($size) || !is_numeric($page) || !is_numeric($size)) {
     die("Неверные параметры запроса.");
 }
 
@@ -25,9 +25,9 @@ if (!isset($name) || !isset($page) || !isset($size) || !is_numeric($page) || !is
 $offset = ($page - 1) * $size;
 
 // Подготовка запроса к базе данных с использованием LIKE для поиска по имени
-$query = "SELECT REC_CODE, MKB_CODE, MKB_NAME FROM icd10 WHERE REC_CODE LIKE :name OR MKB_CODE LIKE :name OR MKB_NAME LIKE :name";
+$query = "SELECT ID, MKB_CODE, MKB_NAME FROM icd10 WHERE MKB_CODE LIKE :request OR MKB_NAME LIKE :request";
 $stmt = $conn->prepare($query);
-$stmt->bindValue(':name', '%' . $name . '%');
+$stmt->bindValue(':request', '%' . $request . '%');
 
 // Получение общего количества записей
 $stmt->execute();
@@ -35,19 +35,19 @@ $count = $stmt->rowCount();
 
 // Выполнение запроса с использованием LIMIT и OFFSET для пагинации
 $stmt = $conn->prepare($query . " LIMIT :size OFFSET :offset");
-$stmt->bindValue(':name', '%' . $name . '%');
-$stmt->bindValue(':size', $size, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+$stmt->bindValue(':request', '%' . $request . '%'); 
+$stmt->bindValue(':size', $size, PDO::PARAM_INT); 
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT); // Добавлен `bindValue` для `:offset`
 $stmt->execute();
 
 // Формирование результата
 $data = [];
 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     $data[] = [
-        "id" => uniqid(), // Генерация случайного ID для каждой записи
+        "id" => $row['id'], // Генерация случайного ID для каждой записи
         "createTime" => date("Y-m-d\TH:i:s.u\Z"), // Текущее время в формате ISO 8601
-        "code" => $row['MKB_CODE'],
-        "name" => $row['MKB_NAME']
+        "code" => $row['mkb_code'],
+        "name" => $row['mkb_name']
     ];
 }
 

@@ -1,17 +1,14 @@
 <?php
-error_reporting(E_ALL);
 $dsn = "pgsql:host=localhost;dbname=Back";
 $user = 'postgres';
 $password = 'V';
 try {
     $conn = new PDO($dsn, $user, $password);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); // Включение обработки ошибок PDO
-    echo "Подключение установлено успешно!"; 
 } catch (PDOException $e) {
     echo "Ошибка подключения: " . $e->getMessage();
 }
 
-$userId = null;
 if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/register' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     // Получение данных из запроса
     $data = json_decode(file_get_contents('php://input'), true);
@@ -122,11 +119,16 @@ else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/login' && $_SERVER['REQUES
     $stmt->execute();
     echo json_encode(['token' => $token]);
     
-}else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/profile' && $_SERVER['REQUEST_METHOD'] === 'GET' /*&& $userID!=null*/) {
+}else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/profile' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    $headers = getallheaders();
+    $token = "";
+    if (isset($headers['Authorization'])) {
+    $token = explode(' ', $headers['Authorization'])[1];
+    }
     // Подготовка запроса к базе данных
-    $query = "SELECT * FROM users WHERE id = :id";
+    $query = "SELECT * FROM doctor WHERE token = :token";
     $stmt = $conn->prepare($query);
-    $stmt->bindValue(':id', $userId);
+    $stmt->bindValue(':token', $token);
     $stmt->execute();
 
     // Проверка существования пользователя
@@ -142,7 +144,7 @@ else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/login' && $_SERVER['REQUES
     // Формирование ответа в формате JSON
     $response = [
         "id" => $user["id"],
-        "createTime" => $user["create_time"], // Предполагается, что в таблице есть столбец create_time
+        "createTime" => $user["createtime"], // Предполагается, что в таблице есть столбец create_time
         "name" => $user["name"],
         "birthday" => $user["birthday"],
         "gender" => $user["gender"],
@@ -154,7 +156,7 @@ else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/login' && $_SERVER['REQUES
     header('Content-type: application/json');
     echo json_encode($response);
 
-} elseif ($_SERVER['REQUEST_URI'] === '/api/doctor.php/profile' && $_SERVER['REQUEST_METHOD'] === 'PUT' && $userID!=null) {
+} elseif ($_SERVER['REQUEST_URI'] === '/api/doctor.php/profile' && $_SERVER['REQUEST_METHOD'] === 'PUT') {
     // Получение данных из тела запроса
     $data = json_decode(file_get_contents('php://input'), true);
 
@@ -164,11 +166,15 @@ else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/login' && $_SERVER['REQUES
         echo json_encode(['error' => 'Недостаточно данных']);
         exit;
     }
-
+    $headers = getallheaders();
+    $token = "";
+    if (isset($headers['Authorization'])) {
+    $token = explode(' ', $headers['Authorization'])[1];
+    }
     // Подготовка запроса к базе данных
-    $query = "UPDATE doctor SET email = :email, name = :name, birthday = :birthday, gender = :gender, phone = :phone WHERE id = :id";
+    $query = "UPDATE doctor SET email = :email, name = :name, birthday = :birthday, gender = :gender, phone = :phone WHERE token = :token";
     $stmt = $conn->prepare($query);
-    $stmt->bindValue(':id', $userId);
+    $stmt->bindValue(':token', $token);
     $stmt->bindValue(':email', $data['email']);
     $stmt->bindValue(':name', $data['name']);
     $stmt->bindValue(':birthday', $data['birthday']);
@@ -183,12 +189,19 @@ else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/login' && $_SERVER['REQUES
     http_response_code(200);
     echo json_encode(["message" => "Success"]);
 
-} elseif ($_SERVER['REQUEST_URI'] === '/api/doctor.php/logout' && $userID!=null)
+} elseif ($_SERVER['REQUEST_URI'] === '/api/doctor.php/logout' && $_SERVER['REQUEST_METHOD'] === 'POST')
 {
-    $query = "UPDATE doctor SET token = NULL WHERE id = :id";
+    $headers = getallheaders();
+    $token = "";
+    if (isset($headers['Authorization'])) {
+    $token = explode(' ', $headers['Authorization'])[1];
+    }
+    $query = "UPDATE doctor SET token = NULL WHERE token = :token";
     $stmt = $conn->prepare($query);
-    $stmt->bindValue(':id', $userId);
+    $stmt->bindValue(':token', $token);
     $stmt->execute();
+    http_response_code(200);
+    echo json_encode(['Sucsess']);
 }
 else {
     // Обработка ошибок
