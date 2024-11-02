@@ -126,7 +126,7 @@ else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/login' && $_SERVER['REQUES
     $token = explode(' ', $headers['Authorization'])[1];
     }
     // Подготовка запроса к базе данных
-    $query = "SELECT * FROM doctor WHERE token = :token";
+    $query = "SELECT id,createTime,name,birthday,gender,email,phone FROM doctor WHERE token = :token";
     $stmt = $conn->prepare($query);
     $stmt->bindValue(':token', $token);
     $stmt->execute();

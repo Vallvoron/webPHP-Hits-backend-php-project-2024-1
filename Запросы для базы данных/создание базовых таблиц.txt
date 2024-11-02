@@ -26,7 +26,6 @@ phone VARCHAR(50),
 speciality VARCHAR(100),
 FOREIGN KEY (speciality) REFERENCES speciality(id),
 token VARCHAR(100)
-)
 
 Осмотр:CREATE TABLE inspection(
 id VARCHAR(100) PRIMARY KEY,
@@ -72,6 +71,9 @@ ConsultationID VARCHAR(100),
 FOREIGN KEY (ConsultationId) REFERENCES Consultation(id),
 author VARCHAR(100),
 FOREIGN KEY (author) REFERENCES doctor(id),
+parentId VARCHAR(100),
+FOREIGN KEY (parentId) REFERENCES comment(id),
 content text,
-createTime timestamp
+createTime timestamp,
+modifyTime timestamp
 )

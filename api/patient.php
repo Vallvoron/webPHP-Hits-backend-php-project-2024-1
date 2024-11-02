@@ -65,6 +65,17 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
 }elseif (preg_match('/\/api\/patient\.php\/([0-9a-f\-]+)\/inspections$/i', $_SERVER['REQUEST_URI'], $matches) && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
     $patientId=$matches[1];
+    $headers = getallheaders();
+    $token = "";
+    if (isset($headers['Authorization'])) {
+    $token = explode(' ', $headers['Authorization'])[1];
+    }
+    $query = "SELECT id FROM doctor WHERE token = :token";
+    $stmt = $conn->prepare($query);
+    $stmt->bindValue(':token', $token);
+    $stmt->execute();
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    $doctorId =$user['id'];
     $id = uniqid(); 
     $createdAt = date('Y-m-d\TH:i:s.u\Z');
     $query = "INSERT INTO inspection (id,createtime,patientid,date,anamnesis,complaints,treatment,conclusion,nextVisitDate,deathDate,previousInspectionid,author) VALUES (:id,:createtime,:patientid,:date,:anamnesis,:complaints,:treatment,:conclusion,:nextVisitDate,:deathDate,:previousInspectionId,:author)";
@@ -80,7 +91,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     $stmt->bindValue(':nextVisitDate', $data['nextVisitDate']);
     $stmt->bindValue(':deathDate', $data['deathDate']);
     $stmt->bindValue(':previousInspectionId', $data['previousInspectionId']);
-    $stmt->bindValue(':author', '?');
+    $stmt->bindValue(':author', $doctorId);
     $stmt->execute();
 
     // Добавление диагностических данных
@@ -111,11 +122,11 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         // Добавление комментариев
         if (isset($consultation['comment']) && isset($consultation['comment']['content'])) {
             $Commid = uniqid();
-            $query = "INSERT INTO comment (id,consultationid,author,content,createtime) VALUES (:id,:consultationid,:author,:content,:createtime)";
+            $query = "INSERT INTO comment (id,consultationid,parentid,author,content,createtime,modifytime) VALUES (:id,:consultationid,:id,:author,:content,:createtime,:createtime)";
             $stmt = $conn->prepare($query);
             $stmt->bindValue(':id', $Commid);
             $stmt->bindValue(':consultationid', $Cid);
-            $stmt->bindValue(':author', '67222a47a586c');
+            $stmt->bindValue(':author', $doctorId);
             $stmt->bindValue(':content', $consultation['comment']['content']);
             $stmt->bindValue(':createtime', $createdAt);
             $stmt->execute();
