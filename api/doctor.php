@@ -42,12 +42,12 @@ if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/register' && $_SERVER['REQUEST_
         return $randomString;
     }
     $token = generateRandomString(10);
-    $doctorId = uniqid();
+    $token = uniqid();
     $createdAt = date('Y-m-d\TH:i:s.u\Z'); 
     // Подготовка запроса на добавление пользователя
     $query = "INSERT INTO doctor (id, createTime, name, password, email, birthday, gender, phone, speciality, token) VALUES (:id, :createTime, :name, :password, :email, :birthday, :gender, :phone, :speciality, :token)";
     $stmt = $conn->prepare($query);
-    $stmt->bindValue(':id', $doctorId);
+    $stmt->bindValue(':id', $token);
     $stmt->bindValue(':createTime', $createdAt);
     $stmt->bindValue(':name', $data['name']);
     $stmt->bindValue(':password', $data['password']);
@@ -133,8 +133,8 @@ else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/login' && $_SERVER['REQUES
 
     // Проверка существования пользователя
     if ($stmt->rowCount() === 0) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Пользователь не найден']);
+        http_response_code(401);
+        echo json_encode(['Unauthorized']);
         exit;
     }
 
@@ -172,6 +172,18 @@ else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/login' && $_SERVER['REQUES
     $token = explode(' ', $headers['Authorization'])[1];
     }
     // Подготовка запроса к базе данных
+    $query = "SELECT id,createTime,name,birthday,gender,email,phone FROM doctor WHERE token = :token";
+    $stmt = $conn->prepare($query);
+    $stmt->bindValue(':token', $token);
+    $stmt->execute();
+
+    // Проверка существования пользователя
+    if ($stmt->rowCount() === 0) {
+        http_response_code(401);
+        echo json_encode(['Unauthorized']);
+        exit;
+    }
+    // Подготовка запроса к базе данных
     $query = "UPDATE doctor SET email = :email, name = :name, birthday = :birthday, gender = :gender, phone = :phone WHERE token = :token";
     $stmt = $conn->prepare($query);
     $stmt->bindValue(':token', $token);
@@ -195,6 +207,18 @@ else if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/login' && $_SERVER['REQUES
     $token = "";
     if (isset($headers['Authorization'])) {
     $token = explode(' ', $headers['Authorization'])[1];
+    }
+    // Подготовка запроса к базе данных
+    $query = "SELECT id,createTime,name,birthday,gender,email,phone FROM doctor WHERE token = :token";
+    $stmt = $conn->prepare($query);
+    $stmt->bindValue(':token', $token);
+    $stmt->execute();
+
+    // Проверка существования пользователя
+    if ($stmt->rowCount() === 0) {
+        http_response_code(401);
+        echo json_encode(['Unauthorized']);
+        exit;
     }
     $query = "UPDATE doctor SET token = NULL WHERE token = :token";
     $stmt = $conn->prepare($query);
