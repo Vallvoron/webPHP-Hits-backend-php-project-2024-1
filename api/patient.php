@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         http_response_code(400);
         echo json_encode(['Bad Request']);
     }
-    $query = "SELECT FROM inspections WHERE previousinspectionid= :previousInspectionId";
+    $query = "SELECT FROM inspection WHERE previousinspectionid= :previousInspectionId";
     $stmt = $conn->prepare($query);
     $stmt->bindValue(':previousInspectionId', $data['previousInspectionId']);
     $stmt->execute();
@@ -99,6 +99,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     {
         http_response_code(400);
         echo json_encode(['Bad Request']);
+        exit();
     }
 
     $id = uniqid(); 
@@ -670,17 +671,16 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     $stmt->bindValue(':token', $token);
     $stmt->execute();
 
-    // Проверка существования пользователя
+
     if ($stmt->rowCount() === 0) {
         http_response_code(401);
         echo json_encode(['Unauthorized']);
         exit;
     }
 
-    // Преобразование результата в массив
+
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Получение параметров запроса
     $name = $_GET['name'] ?? '';
     $conclusions = $_GET['conclusions'] ?? '';
     $sorting = $_GET['sorting'] ?? 'NameAsc';
@@ -689,9 +689,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     $page = $_GET['page'] ?? 1;
     $size = $_GET['size'] ?? 10;
 
-    // Получение ID доктора из токена (не реализовано в данном примере, нужно добавить свою логику)
 
-    // Создание SQL-запроса
     $sql = "SELECT patient.id AS id, patient.createTime AS createTime, patient.name AS name, patient.birthday AS birthday, patient.gender AS gender
         FROM patient 
         JOIN (
@@ -701,29 +699,26 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         ) latest_inspection ON patient.id = latest_inspection.patientId
         JOIN inspection ON patient.id = inspection.patientId AND inspection.createTime = latest_inspection.maxCreateTime";
 
-    // Фильтр по имени пациента
-    if (!empty($name)) {
+
+    if ($name!='') {
         $sql .= " WHERE patient.name ILIKE '%' || :name || '%'"; 
     } else {
         $sql .= " WHERE TRUE";
     }
 
-    // Фильтр по заключениям
+
     if ($conclusions!='') {
         $sql .= " AND inspection.conclusion = :conclusions";
     }
 
-    // Фильтр по id доктора
     if ($onlyMine && !empty($user)) {
         $sql .= " AND inspection.author = :doctorId";
     }
 
-    // Фильтр по запланированным визитам
     if ($sheduledVisits) {
         $sql .= " AND inspection.nextVisitDate IS NOT NULL";
     }
 
-    // Сортировка
     switch ($sorting) {
         case 'NameAsc':
             $sql .= " GROUP BY patient.id, patient.createTime, patient.name ORDER BY patient.name ASC";
@@ -745,15 +740,14 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
             break;
     }
 
-    // Пагинация
     $offset = ($page - 1) * $size;
     $sql .= " LIMIT :size OFFSET :offset";
 
-    // Подготовка запроса
     $stmt = $conn->prepare($sql);
 
-    // Привязка параметров
-    $stmt->bindParam(':name', $name);
+    if ($name!='') {
+        $stmt->bindParam(':name', $name);
+    }
     if ($conclusions!='') {
     $stmt->bindParam(':conclusions', $conclusions);}
     if ($onlyMine=='true' && !empty($user)) {
@@ -778,7 +772,8 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     $countStmt = $conn->prepare($countSql);
 
     // Привязка параметров
-    $countStmt->bindParam(':name', $name);
+    if ($name!='') {
+    $countStmt->bindParam(':name', $name);}
     if ($conclusions!='') {
     $countStmt->bindParam(':conclusions', $conclusions);}
     if ($onlyMine=='true' && !empty($user)) {

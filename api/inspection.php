@@ -30,20 +30,20 @@ if (preg_match('/\/api\/inspection\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_UR
     $data = json_decode(file_get_contents('php://input'), true);
     $id = uniqid(); 
     $createdAt = date('Y-m-d\TH:i:s.u\Z');
-    //Наличие инспекции
+    
     $query = "SELECT * FROM inspection WHERE id = :id";
     $stmt = $conn->prepare($query);
     $stmt->bindValue(':id', $inspectionid);
     $stmt->execute();
     if ($stmt->rowCount() === 0) {
         http_response_code(400);
-        echo json_encode(['Invalid arguments']);
+        echo json_encode(['Not Found']);
         exit;
     }
     else {
         $inspection = $stmt ->fetch(PDO::FETCH_ASSOC);
     }
-    //Налицие пациента
+
     $patientid=$inspection['patientid'];
     $query = "SELECT id,createtime,name,birthday,gender FROM patient WHERE id = :id";
     $stmt = $conn->prepare($query);
@@ -57,8 +57,7 @@ if (preg_match('/\/api\/inspection\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_UR
     else {
         $patient = $stmt ->fetch(PDO::FETCH_ASSOC);
     }
-
-    //Налицие Автора(докотора)
+    
     $doctorid=$inspection['author'];
     $query = "SELECT id,createTime,name,birthday,gender,email,phone FROM doctor WHERE id = :id";
     $stmt = $conn->prepare($query);
@@ -77,98 +76,85 @@ if (preg_match('/\/api\/inspection\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_UR
     $stmt = $conn->prepare($query);
     $stmt->bindValue(':id', $inspectionid);
     $stmt->execute();
-    if ($stmt->rowCount() === 0) {
-        http_response_code(400);
-        echo json_encode(['Invalid arguments']);
-        exit;
+
+    $Dresponses=[];
+    $diagnoses = $stmt ->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($diagnoses as $diagnos)
+    {
+        $query = "SELECT mkb_code,mkb_name FROM icd10 WHERE id = :id";
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':id', $diagnos['icddiagnosisid']);
+        $stmt->execute();
+        $icd = $stmt ->fetch(PDO::FETCH_ASSOC);
+        $Dresponse = [
+            "id" => $diagnos["id"],
+            "createTime" => $diagnos["createtime"],
+            "code" => $icd["mkb_code"],
+            "name" => $icd["mkb_name"],
+            "description" => $diagnos["description"],
+            "type" => $diagnos["type"],
+        ];
+        $Dresponses[] = $Dresponse;
     }
-    else {
-        $Dresponses=[];
-        $diagnoses = $stmt ->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($diagnoses as $diagnos)
-        {
-            $query = "SELECT mkb_code,mkb_name FROM icd10 WHERE id = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $diagnos['icddiagnosisid']);
-            $stmt->execute();
-            $icd = $stmt ->fetch(PDO::FETCH_ASSOC);
-            $Dresponse = [
-                "id" => $diagnos["id"],
-                "createTime" => $diagnos["createtime"],
-                "code" => $icd["mkb_code"],
-                "name" => $icd["mkb_name"],
-                "description" => $diagnos["description"],
-                "type" => $diagnos["type"],
-            ];
-            $Dresponses[] = $Dresponse;
-        }
-    }
-    //Наличие консультации
+
     $query = "SELECT id,createtime,inspectionid,specialityid FROM consultation WHERE inspectionid = :id";
     $stmt = $conn->prepare($query);
     $stmt->bindValue(':id', $inspectionid);
     $stmt->execute();
-    if ($stmt->rowCount() === 0) {
-        http_response_code(400);
-        echo json_encode(['Invalid arguments']);
-        exit;
-    }
-    else {
-        $consultations = $stmt ->fetchAll(PDO::FETCH_ASSOC);
-        $Cresponses=[];
-        foreach($consultations as $consultation){
-            $query = "SELECT id,name,createTime FROM speciality WHERE id = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $consultation['specialityid']);
-            $stmt->execute();
-            $speciality = $stmt ->fetch(PDO::FETCH_ASSOC);
+    $consultations = $stmt ->fetchAll(PDO::FETCH_ASSOC);
+    $Cresponses=[];
+    foreach($consultations as $consultation){
+        $query = "SELECT id,name,createTime FROM speciality WHERE id = :id";
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':id', $consultation['specialityid']);
+        $stmt->execute();
+        $speciality = $stmt ->fetch(PDO::FETCH_ASSOC);
 
-            $query = "SELECT id,author,createTime,content,modifyTime FROM comment WHERE consultationid = :id AND parentid=id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $consultation['id']);
-            $stmt->execute();
-            $comment = $stmt ->fetch(PDO::FETCH_ASSOC);
-            $query = "SELECT id,createTime,name,birthday,gender,email,phone FROM doctor WHERE id = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $comment['author']);
-            $stmt->execute();
-            $author = $stmt ->fetch(PDO::FETCH_ASSOC);
-            $Commresponse =[
-                "id" => $comment["id"],
-                "createTime" => $comment["createtime"],
-                "content"=>$comment["content"],
-                "author"=> $author,
-                "modifyTime"=>$comment["modifytime"]
-            ];
-            $Cresponse = [
-                "id" => $consultation["id"],
-                "createTime" => $consultation["createtime"],
-                "inspectionId" => $consultation["inspectionid"],
-                "speciality" => $speciality,
-                "rootComment" => $Commresponse,
-            ];
-            $Cresponses[] = $Cresponse;
-        }
-        $response = [
-            "id" => $inspection["id"],
-            "createTime" => $inspection["createtime"],
-            "date" => $inspection["date"],
-            "anamnesis" => $inspection["anamnesis"],
-            "complaints" => $inspection["complaints"],
-            "treatment" => $inspection["treatment"],
-            "conclusion" => $inspection["conclusion"],
-            "nextVisitDate" => $inspection["nextvisitdate"],
-            "deathDate" => $inspection["deathdate"],
-            "previousInspectionId" => $inspection["previousinspectionid"],
-            "patient" => $patient,
-            "doctor" => $doctor,
-            "diagnoses" => $Dresponses,
-            "consultations" => $Cresponses
+        $query = "SELECT id,author,createTime,content,modifyTime FROM comment WHERE consultationid = :id AND parentid=id";
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':id', $consultation['id']);
+        $stmt->execute();
+        $comment = $stmt ->fetch(PDO::FETCH_ASSOC);
+        $query = "SELECT id,createTime,name,birthday,gender,email,phone FROM doctor WHERE id = :id";
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':id', $comment['author']);
+        $stmt->execute();
+        $author = $stmt ->fetch(PDO::FETCH_ASSOC);
+        $Commresponse =[
+            "id" => $comment["id"],
+            "createTime" => $comment["createtime"],
+            "content"=>$comment["content"],
+            "author"=> $author,
+            "modifyTime"=>$comment["modifytime"]
         ];
-        header('Content-type: application/json');
-        http_response_code(200);
-        echo json_encode(["Inspection found and successfully extracted" => $response]);
+        $Cresponse = [
+            "id" => $consultation["id"],
+            "createTime" => $consultation["createtime"],
+            "inspectionId" => $consultation["inspectionid"],
+            "speciality" => $speciality,
+            "rootComment" => $Commresponse,
+        ];
+        $Cresponses[] = $Cresponse;
     }
+    $response = [
+        "id" => $inspection["id"],
+        "createTime" => $inspection["createtime"],
+        "date" => $inspection["date"],
+        "anamnesis" => $inspection["anamnesis"],
+        "complaints" => $inspection["complaints"],
+        "treatment" => $inspection["treatment"],
+        "conclusion" => $inspection["conclusion"],
+        "nextVisitDate" => $inspection["nextvisitdate"],
+        "deathDate" => $inspection["deathdate"],
+        "previousInspectionId" => $inspection["previousinspectionid"],
+        "patient" => $patient,
+        "doctor" => $doctor,
+        "diagnoses" => $Dresponses,
+        "consultations" => $Cresponses
+    ];
+    header('Content-type: application/json');
+    http_response_code(200);
+    echo json_encode(["Inspection found and successfully extracted" => $response]);
 }elseif (preg_match('/\/api\/inspection\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_URI'], $matches) && $_SERVER['REQUEST_METHOD'] === 'PUT'){
     if (true){
         $headers = getallheaders();
@@ -189,6 +175,16 @@ if (preg_match('/\/api\/inspection\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_UR
     $doctorid = $stmt->fetch(PDO::FETCH_ASSOC);
     $inspectionid=$matches[1];
     $data = json_decode(file_get_contents('php://input'), true);
+    if (!isset($data['complains'], $data['treatment'], $data['conclusion'], $data['diagnoses'])) {
+        http_response_code(400);
+        echo json_encode(['Invalid arguments']);
+        exit;
+    }
+    if (($data['conslusion'] !='Disease') && ($data['conclusion'] !='Recovery') && ($data['conclusion'] !='Death')) {
+        http_response_code(400);
+        echo json_encode(['Invalid arguments']);
+        exit;
+    }
     $createdAt = date('Y-m-d\TH:i:s.u\Z');
     
     $query = "SELECT * FROM inspection WHERE id = :id";
