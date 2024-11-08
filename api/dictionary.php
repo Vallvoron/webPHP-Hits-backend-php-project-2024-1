@@ -8,9 +8,10 @@ try {
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(["Internal Server Error"]);
+    exit();
 }
 
-if ($_SERVER['REQUEST_URI'] === '/api/dictionary.php/icd10/roots'){
+if ($_SERVER['REQUEST_URI'] === '/api/dictionary.php/icd10/roots' && $_SERVER['REQUEST_METHOD'] === 'GET'){
     $stmt = $conn->prepare('SELECT * FROM icd10 WHERE ID_PARENT IS NULL;');
     $stmt->execute();
     $roots = $stmt->fetchAll(PDO::FETCH_ASSOC);

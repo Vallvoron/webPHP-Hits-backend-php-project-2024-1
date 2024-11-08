@@ -8,6 +8,7 @@ try {
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(["Internal Server Error"]);
+    exit();
 }
 if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/register' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     // Получение данных из запроса
@@ -156,7 +157,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/doctor.php/register' && $_SERVER['REQUEST_
 } elseif ($_SERVER['REQUEST_URI'] === '/api/doctor.php/profile' && $_SERVER['REQUEST_METHOD'] === 'PUT') {
     // Получение данных из тела запроса
     $data = json_decode(file_get_contents('php://input'), true);
-    if (!isset($data['name'], $data['password'], $data['gender'])) {
+    if (!isset($data['name'], $data['email'], $data['gender'])) {
         http_response_code(400);
         echo json_encode(['Invalid arguments']);
         exit;
