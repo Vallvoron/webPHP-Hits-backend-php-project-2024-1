@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/dictionary.php/icd10/roots'){
     else{
         $offset = ($page - 1) * $size;
 
-        $query = "SELECT id, createtime, name FROM speciality WHERE name LIKE '%' || :name || '%' ";
+        $query = "SELECT id, createtime, name FROM speciality WHERE name ILIKE '%' || :name || '%' ";
         $stmt = $conn->prepare($query);
         $stmt->bindValue(':name', $name);
         $stmt->execute();

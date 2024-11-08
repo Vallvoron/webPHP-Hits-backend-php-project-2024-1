@@ -136,7 +136,435 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     header('Content-type: application/json');
     http_response_code(200);
     echo json_encode(["Success" => $Cid]);
-} elseif (preg_match('/\/api\/patient\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_URI'], $matches) && $_SERVER['REQUEST_METHOD'] === 'GET') {
+}elseif (preg_match('/\/api\/patient\.php\/([0-9a-f\-]+)\/inspections\/\??.*$/i', $_SERVER['REQUEST_URI'], $matches) && $_SERVER['REQUEST_METHOD'] === 'GET'){
+    if (true){
+        $headers = getallheaders();
+        $token = "";
+        if (isset($headers['Authorization'])) {
+        $token = explode(' ', $headers['Authorization'])[1];
+        }
+        $query = "SELECT id FROM doctor WHERE token = :token";
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':token', $token);
+        $stmt->execute();
+        if ($stmt->rowCount() === 0) {
+        http_response_code(401);
+        echo json_encode(['Unauthorized']);
+        exit;
+        }
+    }
+    $patientId = $matches[1];
+    $inspections = [];
+    $request = $_GET['request'];
+    if(isset($request)){
+        $query = "SELECT DISTINCT i.*, ic.mkb_code, ic.mkb_name
+        FROM inspection i
+        JOIN diagnos d ON i.id = d.inspectionid
+        JOIN icd10 ic ON d.icdDiagnosisid = ic.id
+        WHERE patientid=:patientid AND i.previousinspectionid IS NULL
+        AND (ic.mkb_code ILIKE :icd_part OR ic.mkb_name ILIKE :icd_part) ";
+
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':icd_part', '%' . $request . '%');
+        $stmt->bindValue(':patientid', $patientId);
+        $stmt->execute();
+        $Pinspection = $stmt->fetchAll(PDO::FETCH_ASSOC); 
+
+        foreach ($Pinspection as $inspection)
+        {
+            $query = "SELECT name FROM doctor WHERE id = :id";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $inspection['author']);
+            $stmt->execute();
+            $doctor = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+            $query = "SELECT name FROM patient WHERE id = :id";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $inspection['patientid']);
+            $stmt->execute();
+            $patient = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+            $query = "SELECT id,icdDiagnosisID,description,type,createtime FROM diagnos WHERE inspectionid = :id";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $inspection['id']);
+            $stmt->execute();
+            $diagnoses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+            $Dresponses=[];
+            foreach ($diagnoses as $diagnos)
+            {
+                $query = "SELECT mkb_code,mkb_name FROM icd10 WHERE id = :id";
+                $stmt = $conn->prepare($query);
+                $stmt->bindValue(':id', $diagnos['icddiagnosisid']);
+                $stmt->execute();
+                $icd = $stmt ->fetch(PDO::FETCH_ASSOC);
+                $Dresponse = [
+                    "id" => $diagnos["id"],
+                    "createTime" => $diagnos["createtime"],
+                    "code" => $icd["mkb_code"],
+                    "name" => $icd["mkb_name"],
+                    "description" => $diagnos["description"],
+                    "type" => $diagnos["type"],
+                ];
+                $Dresponses[] = $Dresponse;
+            }
+
+            $inspectionData = [
+                "id" => $inspection["id"],
+                "createTime" => $inspection["createtime"],
+                "date" => $inspection["date"],
+                "diagnosis" => $Dresponses,
+            ];
+            $inspections[] = $inspectionData;
+        }
+    }
+    http_response_code(200);
+    echo json_encode(["Patient inspections list retrived"]);
+    echo json_encode([$inspections]);
+}elseif (preg_match('/\/api\/patient\.php\/([0-9a-f\-]+)\/inspections\??.*$/i', $_SERVER['REQUEST_URI'], $matches) && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    if (true){
+        $headers = getallheaders();
+        $token = "";
+        if (isset($headers['Authorization'])) {
+        $token = explode(' ', $headers['Authorization'])[1];
+        }
+        $query = "SELECT id FROM doctor WHERE token = :token";
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':token', $token);
+        $stmt->execute();
+        if ($stmt->rowCount() === 0) {
+        http_response_code(401);
+        echo json_encode(['Unauthorized']);
+        exit;
+        }
+    }
+
+    $grouped = filter_var($_GET['grouped'], FILTER_VALIDATE_BOOLEAN) ?? false;
+    $page = $_GET['page'] ?? 1;
+    $size = $_GET['size'] ?? 10;
+    $flag=true;
+    if($_GET['icdRoots']!= ''){
+        $roots = explode(',', $_GET['icdRoots']);
+        $flag=true;
+    }else {$roots = [null]; $flag=false;}
+
+    $query = "SELECT * FROM diagnos" ;
+    $stmt = $conn->prepare($query);
+    $stmt->execute();
+    $diagnoses=$stmt->fetchAll(PDO::FETCH_ASSOC);
+    $filtered = [];
+    if (!$flag){
+
+    }
+    else{
+        foreach($diagnoses as $diagnos){
+
+            $idparent = 0;
+            $idcurent = $diagnos['icddiagnosisid'];
+            $query = "SELECT id_parent FROM icd10 WHERE (id = :id)";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $idcurent);
+            $stmt->execute();
+            $idparent=$stmt->fetch(PDO::FETCH_ASSOC);
+
+            while($idparent['id_parent']!=NULL){
+                $idcurent= $idparent['id_parent'];
+                $query = "SELECT id_parent FROM icd10 WHERE (id = :id)";
+                $stmt = $conn->prepare($query);
+                $stmt->bindValue(':id', $idcurent);
+                $stmt->execute();
+                $idparent=$stmt->fetch(PDO::FETCH_ASSOC);
+            }
+            foreach($roots as $root){
+                if ($idcurent == $root){
+                    $filtered[] = $diagnos['id'];
+                    break;
+                }
+            }
+        }
+        if (empty($filtered)) {
+            $filtered[]=null;
+        }
+    }
+
+    $patientId = $matches[1];
+    $inspections = [];
+    
+    function getInspectionChain($inspectionId, $conn, $patientId, $filtered) {
+
+        $query = "SELECT i.* 
+        FROM inspection i 
+        ";
+
+        if (!empty($filtered)) {
+            $query .= "JOIN diagnos d ON i.id = d.inspectionid ";
+        }
+
+        $query .= "WHERE i.id = :inspectionId AND patientid=:patientid ";
+
+        if (!empty($filtered)) {
+            $query .= "AND d.id IN (:icdIds) ";
+        }
+
+        $query .= "GROUP BY i.id";
+        //$query = "SELECT i.* FROM inspection i JOIN diagnos d ON i.id = d.inspectionid WHERE i.id = :inspectionId AND patientid=:patientid AND d.id IN (:icdIds) GROUP BY i.id;";
+        if (!empty($filtered)) {
+            $query = str_replace(':icdIds', implode(', ', $filtered), $query);
+        }
+
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':inspectionId', $inspectionId);
+        $stmt->bindValue(':patientid', $patientId);
+        $stmt->execute();
+
+        if ($stmt->rowCount() > 0) {
+            $inspection = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $query = "SELECT name FROM doctor WHERE id = :id";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $inspection['author']);
+            $stmt->execute();
+            $doctor = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $query = "SELECT name FROM patient WHERE id = :id";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $inspection['patientid']);
+            $stmt->execute();
+            $patient = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $query = "SELECT id,icdDiagnosisID,description,type,createtime FROM diagnos WHERE inspectionid = :id";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $inspectionId);
+            $stmt->execute();
+            $diagnoses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $Dresponses=[];
+            foreach ($diagnoses as $diagnos)
+            {
+                $query = "SELECT mkb_code,mkb_name FROM icd10 WHERE id = :id";
+                $stmt = $conn->prepare($query);
+                $stmt->bindValue(':id', $diagnos['icddiagnosisid']);
+                $stmt->execute();
+                $icd = $stmt ->fetch(PDO::FETCH_ASSOC);
+                $Dresponse = [
+                    "id" => $diagnos["id"],
+                    "createTime" => $diagnos["createtime"],
+                    "code" => $icd["mkb_code"],
+                    "name" => $icd["mkb_name"],
+                    "description" => $diagnos["description"],
+                    "type" => $diagnos["type"],
+                ];
+                $Dresponses[] = $Dresponse;
+            }
+
+            $query = "SELECT i.* 
+            FROM inspection i 
+            ";
+
+            if (!empty($filtered)) {
+                // Добавляем LEFT JOIN, если есть фильтр
+                $query .= "JOIN diagnos d ON i.id = d.inspectionid ";
+            }
+
+            $query .= "WHERE previousinspectionid = :id AND patientid=:patientid ";
+
+            if (!empty($filtered)) {
+                // Добавляем условие IN, если есть фильтр
+                $query .= "AND d.id IN (:icdIds) OR d.id IS NULL ";
+            }
+
+            $query .= "GROUP BY i.id";
+            //$query = "SELECT i.id FROM inspection i JOIN diagnos d ON i.id = d.inspectionid WHERE previousinspectionid = :id AND patientid=:patientid AND d.id IN (:icdIds) GROUP BY i.id;";
+            $query = str_replace(':icdIds', implode(', ', $filtered), $query);
+
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $inspectionId);
+            $stmt->bindValue(':patientid', $patientId);
+            $stmt->execute();
+            $nests=$stmt->fetchAll(PDO::FETCH_ASSOC);
+            $inspectionData = [
+                "id" => $inspection["id"],
+                "createTime" => $inspection["createtime"],
+                "previousId" => $inspection["previousinspectionid"],
+                "date" => $inspection["date"],
+                "conclusion" => $inspection["conclusion"],
+                "doctorId" => $inspection["author"],
+                "doctor" => $doctor['name'],
+                "patientId" => $inspection["patientid"],
+                "patient" => $patient['name'],
+                "diagnosis" => $Dresponses,
+                "hasChain" => !is_null($inspection["previousinspectionid"]),
+                "hasNested" => $stmt->rowCount() > 0
+            ];
+
+            $inspections[] = $inspectionData;
+            
+            foreach($nests as $nest)
+            {
+                $inspections = array_merge($inspections, getInspectionChain( $nest['id'], $conn, $patientId, $filtered));
+            }
+            return $inspections;
+        } else {
+            http_response_code(400);
+            echo json_encode(["Bad Request"]);
+        }
+    }
+    if($grouped)
+    {
+        $query = "SELECT i.* 
+        FROM inspection i 
+        ";
+
+        if (!empty($filtered)) {
+            // Добавляем LEFT JOIN, если есть фильтр
+            $query .= "JOIN diagnos d ON i.id = d.inspectionid ";
+        }
+
+        $query .= "WHERE i.patientid = :id AND i.previousinspectionid IS NULL ";
+
+        if (!empty($filtered)) {
+            // Добавляем условие IN, если есть фильтр
+            $query .= "AND d.id IN (:icdIds)";
+        }
+
+        $query .= "GROUP BY i.id";
+
+        //$query = "SELECT i.* FROM inspection i JOIN diagnos d ON i.id = d.inspectionid WHERE i.patientid = :id AND i.previousinspectionid IS NULL AND d.id IN (:icdIds) GROUP BY i.id;";
+        if (!empty($filtered)) {
+            $filteredWithQuotes = array_map(function($value) {
+                return "'$value'"; 
+            }, $filtered);
+            $filtered=$filteredWithQuotes;
+            $query = str_replace(':icdIds', implode(', ', $filteredWithQuotes), $query);
+        }
+
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':id', $patientId);
+        $stmt->execute();
+        $inspection = $stmt->fetch(PDO::FETCH_ASSOC);
+        if($stmt->rowCount() > 0){
+            $inspections = getInspectionChain($inspection['id'], $conn, $patientId, $filtered);
+        }
+    }
+
+    else{
+        $query = "SELECT i.* 
+        FROM inspection i 
+        ";
+
+        if (!empty($filtered)) {
+            // Добавляем LEFT JOIN, если есть фильтр
+            $query .= "JOIN diagnos d ON i.id = d.inspectionid ";
+        }
+
+        $query .= "WHERE i.patientid = :id ";
+
+        if (!empty($filtered)) {
+            // Добавляем условие IN, если есть фильтр
+            $query .= "AND d.id IN (:icdIds) ";
+        }
+
+        $query .= "GROUP BY i.id";
+        //$query = "SELECT i.* FROM inspection i JOIN diagnos d ON i.id = d.inspectionid WHERE patientid = :id AND d.id IN (:icdIds)";
+        if (!empty($filtered)) {
+            $filteredWithQuotes = array_map(function($value) {
+                return "'$value'"; 
+            }, $filtered);
+            $filtered=$filteredWithQuotes;
+            $query = str_replace(':icdIds', implode(', ', $filteredWithQuotes), $query);
+        }
+        
+        $stmt = $conn->prepare($query);
+        $stmt->bindValue(':id', $patientId);
+        $stmt->execute();
+        $Pinspection = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($Pinspection as $inspection)
+        {
+            $query = "SELECT name FROM doctor WHERE id = :id";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $inspection['author']);
+            $stmt->execute();
+            $doctor = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+            $query = "SELECT name FROM patient WHERE id = :id";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $inspection['patientid']);
+            $stmt->execute();
+            $patient = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+            $query = "SELECT id,icdDiagnosisID,description,type,createtime FROM diagnos WHERE inspectionid = :id";
+            $stmt = $conn->prepare($query);
+            $stmt->bindValue(':id', $inspection['id']);
+            $stmt->execute();
+            $diagnoses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+            $Dresponses=[];
+            foreach ($diagnoses as $diagnos)
+            {
+                $query = "SELECT mkb_code,mkb_name FROM icd10 WHERE id = :id";
+                $stmt = $conn->prepare($query);
+                $stmt->bindValue(':id', $diagnos['icddiagnosisid']);
+                $stmt->execute();
+                $icd = $stmt ->fetch(PDO::FETCH_ASSOC);
+                $Dresponse = [
+                    "id" => $diagnos["id"],
+                    "createTime" => $diagnos["createtime"],
+                    "code" => $icd["mkb_code"],
+                    "name" => $icd["mkb_name"],
+                    "description" => $diagnos["description"],
+                    "type" => $diagnos["type"],
+                ];
+                $Dresponses[] = $Dresponse;
+            }
+
+            $inspectionData = [
+                "id" => $inspection["id"],
+                "createTime" => $inspection["createtime"],
+                "previousId" => $inspection["previousinspectionid"],
+                "date" => $inspection["date"],
+                "conclusion" => $inspection["conclusion"],
+                "doctorId" => $inspection["author"],
+                "doctor" => $doctor['name'],
+                "patientId" => $inspection["patientid"],
+                "patient" => $patient['name'],
+                "diagnosis" => $Dresponses,
+            ];
+            $inspections[] = $inspectionData;
+        }
+    }
+    function paginateInspections($inspections, $page, $size) {
+        $page = (int) $page;
+        $size = (int) $size;
+    
+        if ($page < 1) {
+            $page = 1;
+        }
+        if ($size < 1) {
+            $size = 10; 
+        }
+        
+        $startIndex = ($page - 1) * $size;
+        $endIndex = $startIndex + $size;
+        $endIndex = min($endIndex, count($inspections));
+
+        $paginatedInspections = array_slice($inspections, $startIndex, $endIndex - $startIndex);
+    
+        return $paginatedInspections;
+    }
+    $paginatedInspections = paginateInspections($inspections, $page, $size);
+    $pagination = [
+        "size"=> $size,
+        "count"=> count($inspections),
+        "current"=>$page,
+    ];
+    $response = [
+        "inspections" => $paginatedInspections,
+        "pagination"=> $pagination,
+    ];
+    http_response_code(200);
+    echo json_encode(["Patient inspections list retrived"]);
+    echo json_encode($response);
+}elseif (preg_match('/\/api\/patient\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_URI'], $matches) && $_SERVER['REQUEST_METHOD'] === 'GET') {
     if (true){
         $headers = getallheaders();
         $token = "";
@@ -323,178 +751,6 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     // Отправка ответа
     header('Content-Type: application/json');
     echo json_encode($response);
-}elseif (preg_match('/\/api\/patient\.php\/([0-9a-f\-]+)\/inspections$/i', $_SERVER['REQUEST_URI'], $matches) && $_SERVER['REQUEST_METHOD'] === 'GET') {
-    if (true){
-        $headers = getallheaders();
-        $token = "";
-        if (isset($headers['Authorization'])) {
-        $token = explode(' ', $headers['Authorization'])[1];
-        }
-        $query = "SELECT id FROM doctor WHERE token = :token";
-        $stmt = $conn->prepare($query);
-        $stmt->bindValue(':token', $token);
-        $stmt->execute();
-        if ($stmt->rowCount() === 0) {
-        http_response_code(401);
-        echo json_encode(['Unauthorized']);
-        exit;
-        }
-    }
-
-    $grouped = filter_var($_GET['grouped'], FILTER_VALIDATE_BOOLEAN) ?? false;
-    $page = $_GET['page'] ?? 1;
-    $size = $_GET['size'] ?? 10;
-
-    $patientId = $matches[1];
-    $inspections = [];
-    function getInspectionChain($inspectionId, $conn) {
-
-        $query = "SELECT * FROM inspection WHERE id = :inspectionId";
-        $stmt = $conn->prepare($query);
-        $stmt->bindValue(':inspectionId', $inspectionId);
-        $stmt->execute();
-
-        if ($stmt->rowCount() > 0) {
-            $inspection = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            $query = "SELECT name FROM doctor WHERE id = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $inspection['author']);
-            $stmt->execute();
-            $doctor = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            $query = "SELECT name FROM patient WHERE id = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $inspection['patientid']);
-            $stmt->execute();
-            $patient = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            $query = "SELECT id,icdDiagnosisID,description,type,createtime FROM diagnos WHERE inspectionid = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $inspectionId);
-            $stmt->execute();
-            $diagnoses = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            $Dresponses=[];
-            foreach ($diagnoses as $diagnos)
-            {
-                $query = "SELECT mkb_code,mkb_name FROM icd10 WHERE id = :id";
-                $stmt = $conn->prepare($query);
-                $stmt->bindValue(':id', $diagnos['icddiagnosisid']);
-                $stmt->execute();
-                $icd = $stmt ->fetch(PDO::FETCH_ASSOC);
-                $Dresponse = [
-                    "id" => $diagnos["id"],
-                    "createTime" => $diagnos["createtime"],
-                    "code" => $icd["mkb_code"],
-                    "name" => $icd["mkb_name"],
-                    "description" => $diagnos["description"],
-                    "type" => $diagnos["type"],
-                ];
-                $Dresponses[] = $Dresponse;
-            }
-
-            $query = "SELECT id FROM inspection WHERE previousinspectionid = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $inspectionId);
-            $stmt->execute();
-            $nests=$stmt->fetchAll(PDO::FETCH_ASSOC);
-            $inspectionData = [
-                "id" => $inspection["id"],
-                "createTime" => $inspection["createtime"],
-                "previousId" => $inspection["previousinspectionid"],
-                "date" => $inspection["date"],
-                "conclusion" => $inspection["conclusion"],
-                "doctorId" => $inspection["author"],
-                "doctor" => $doctor['name'],
-                "patientId" => $inspection["patientid"],
-                "patient" => $patient['name'],
-                "diagnosis" => $Dresponses,
-                "hasChain" => !is_null($inspection["previousinspectionid"]),
-                "hasNested" => $stmt->rowCount() > 0
-            ];
-
-            $inspections[] = $inspectionData;
-            
-            foreach($nests as $nest)
-            {
-                $inspections = array_merge($inspections, getInspectionChain( $nest['id'], $conn));
-            }
-            return $inspections;
-        } else {
-            http_response_code(400);
-            echo json_encode(["Bad Request"]);
-        }
-    }
-    if($grouped)
-    {
-        $query = "SELECT * FROM inspection WHERE patientid = :id AND previousinspectionid=null";
-        $stmt = $conn->prepare($query);
-        $stmt->bindValue(':id', $patientId);
-        $stmt->execute();
-        $inspection = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            $query = "SELECT name FROM doctor WHERE id = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $inspection['author']);
-            $stmt->execute();
-            $doctor = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            $query = "SELECT name FROM patient WHERE id = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $inspection['patientid']);
-            $stmt->execute();
-            $patient = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            $query = "SELECT id,icdDiagnosisID,description,type,createtime FROM diagnos WHERE inspectionid = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $inspectionId);
-            $stmt->execute();
-            $diagnoses = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            $Dresponses=[];
-            foreach ($diagnoses as $diagnos)
-            {
-                $query = "SELECT mkb_code,mkb_name FROM icd10 WHERE id = :id";
-                $stmt = $conn->prepare($query);
-                $stmt->bindValue(':id', $diagnos['icddiagnosisid']);
-                $stmt->execute();
-                $icd = $stmt ->fetch(PDO::FETCH_ASSOC);
-                $Dresponse = [
-                    "id" => $diagnos["id"],
-                    "createTime" => $diagnos["createtime"],
-                    "code" => $icd["mkb_code"],
-                    "name" => $icd["mkb_name"],
-                    "description" => $diagnos["description"],
-                    "type" => $diagnos["type"],
-                ];
-                $Dresponses[] = $Dresponse;
-            }
-
-            $inspectionData = [
-                "id" => $inspection["id"],
-                "createTime" => $inspection["createtime"],
-                "previousId" => $inspection["previousinspectionid"],
-                "date" => $inspection["date"],
-                "conclusion" => $inspection["conclusion"],
-                "doctorId" => $inspection["author"],
-                "doctor" => $doctor['name'],
-                "patientId" => $inspection["patientid"],
-                "patient" => $patient['name'],
-                "diagnosis" => $Dresponses,
-                "hasChain" => !is_null($inspection["previousinspectionid"]),
-                "hasNested" => $stmt->rowCount() > 0
-            ];
-
-            $inspections[] = $inspectionData;
-        $inspections = getInspectionChain($inspectionId, $conn);
-    }
-    else{
-        
-    }
-    $inspections = getInspectionChain($inspectionId, $conn);
-    http_response_code(200);
-    echo json_encode(["Success" => $inspections]);
 }else {
     http_response_code(404);
     echo json_encode(["Not Found"]);
