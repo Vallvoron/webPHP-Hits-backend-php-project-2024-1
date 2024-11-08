@@ -32,11 +32,11 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     }
 
     $createdAt = date('Y-m-d\TH:i:s.u\Z');
-    $consultationId = uniqid(); 
+    $consultationid = uniqid(); 
 
     $query = "INSERT INTO patient (id, name, birthday, gender, createTime) VALUES (:id, :name, :birthday, :gender, :createTime)";
     $stmt = $conn->prepare($query);
-    $stmt->bindValue(':id', $consultationId);
+    $stmt->bindValue(':id', $consultationid);
     $stmt->bindValue(':name', $data['name']);
     $stmt->bindValue(':birthday', $data['birthday']);
     $stmt->bindValue(':gender', $data['gender']);
@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
 
     header('Content-type: application/json');
     http_response_code(200);
-    echo json_encode(["Patient was registered" => $consultationId]);
+    echo json_encode(["Patient was registered" => $consultationid]);
 } elseif (preg_match('/\/api\/patient\.php\/([0-9a-f\-]+)\/inspections$/i', $_SERVER['REQUEST_URI'], $matches) && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (true){
         $headers = getallheaders();
@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         }
     }
     $data = json_decode(file_get_contents('php://input'), true);
-    $consultationId=$matches[1];
+    $consultationid=$matches[1];
     $headers = getallheaders();
     $token = "";
     if (isset($headers['Authorization'])) {
@@ -74,15 +74,40 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     $stmt = $conn->prepare($query);
     $stmt->bindValue(':token', $token);
     $stmt->execute();
+    if($stmt->rowCount() === 0)
+    {
+        http_response_code(401);
+        echo json_encode(['Unauthorized']);
+    }
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
     $token =$user['id'];
+
+    $query = "SELECT FROM patient WHERE id=:patientid";
+    $stmt = $conn->prepare($query);
+    $stmt->bindValue(':patientid', $consultationid);
+    $stmt->execute();
+    if($stmt->rowCount() === 0)
+    {
+        http_response_code(400);
+        echo json_encode(['Bad Request']);
+    }
+    $query = "SELECT FROM inspections WHERE previousinspectionid= :previousInspectionId";
+    $stmt = $conn->prepare($query);
+    $stmt->bindValue(':previousInspectionId', $data['previousInspectionId']);
+    $stmt->execute();
+    if($stmt->rowCount() === 0)
+    {
+        http_response_code(400);
+        echo json_encode(['Bad Request']);
+    }
+
     $id = uniqid(); 
     $createdAt = date('Y-m-d\TH:i:s.u\Z');
     $query = "INSERT INTO inspection (id,createtime,patientid,date,anamnesis,complaints,treatment,conclusion,nextVisitDate,deathDate,previousInspectionid,author) VALUES (:id,:createtime,:patientid,:date,:anamnesis,:complaints,:treatment,:conclusion,:nextVisitDate,:deathDate,:previousInspectionId,:author)";
     $stmt = $conn->prepare($query);
     $stmt->bindValue(':id', $id);
     $stmt->bindValue(':createtime', $createdAt);
-    $stmt->bindValue(':patientid', $consultationId);
+    $stmt->bindValue(':patientid', $consultationid);
     $stmt->bindValue(':date', $data['date']);
     $stmt->bindValue(':anamnesis', $data['anamnesis']);
     $stmt->bindValue(':complaints', $data['complaints']);
@@ -153,7 +178,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         exit;
         }
     }
-    $consultationId = $matches[1];
+    $consultationid = $matches[1];
     $inspections = [];
     $request = $_GET['request'];
     if(isset($request)){
@@ -167,7 +192,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
 
         $stmt = $conn->prepare($query);
         $stmt->bindValue(':icd_part', '%' . $request . '%');
-        $stmt->bindValue(':patientid', $consultationId);
+        $stmt->bindValue(':patientid', $consultationid);
         $stmt->execute();
         $Pinspection = $stmt->fetchAll(PDO::FETCH_ASSOC); 
         foreach ($Pinspection as $inspection)
@@ -296,10 +321,10 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
             $filtered[]=null;
         }
     }
-    $consultationId = $matches[1];
+    $consultationid = $matches[1];
     $inspections = [];
-    
-    function getInspectionChain($inspectionId, $conn, $patientId, $filtered) {
+    $chosen=[];
+    function getInspectionChain($inspectionId, $conn, $patientId, $filtered, $chosen) {
 
         $query = "SELECT i.* 
         FROM inspection i 
@@ -407,15 +432,25 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
             ];
 
             $inspections[] = $inspectionData;
-            
             foreach($nests as $nest)
             {
-                $inspections = array_merge($inspections, getInspectionChain( $nest['id'], $conn, $patientId, $filtered));
+                if(!in_array($inspection['id'], $chosen)){
+                    $chosen[]= $nest['id'];
+                    if(getInspectionChain( $nest['id'], $conn, $patientId, $filtered, $chosen)==null){
+                        return $inspections;
+                    }
+                    $inspections = array_merge($inspections, getInspectionChain( $nest['id'], $conn, $patientId, $filtered, $chosen));
+                }
+            }
+            if(!is_null($inspection["previousinspectionid"]) && !in_array($inspection['id'], $chosen))
+            {
+                $chosen[]= $inspection['id'];
+                if(getInspectionChain( $inspection["previousinspectionid"], $conn, $patientId, $filtered, $chosen)==null){
+                    return $inspections;
+                }
+                $inspections = array_merge($inspections, getInspectionChain( $inspection["previousinspectionid"], $conn, $patientId, $filtered, $chosen));
             }
             return $inspections;
-        } else {
-            http_response_code(400);
-            echo json_encode(["Bad Request"]);
         }
     }
     if($grouped)
@@ -429,7 +464,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
             $query .= "JOIN diagnos d ON i.id = d.inspectionid ";
         }
 
-        $query .= "WHERE i.patientid = :id AND i.previousinspectionid IS NULL ";
+        $query .= "WHERE i.patientid = :id ";
 
         if (!empty($filtered)) {
 
@@ -447,11 +482,14 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         }
 
         $stmt = $conn->prepare($query);
-        $stmt->bindValue(':id', $consultationId);
+        $stmt->bindValue(':id', $consultationid);
         $stmt->execute();
         $inspection = $stmt->fetch(PDO::FETCH_ASSOC);
         if($stmt->rowCount() > 0){
-            $inspections = getInspectionChain($inspection['id'], $conn, $consultationId, $filtered);
+            $inspections = getInspectionChain($inspection['id'], $conn, $consultationid, $filtered, $chosen);
+        }else {
+            http_response_code(400);
+            echo json_encode(["Bad Request"]);
         }
     }
 
@@ -483,9 +521,13 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         }
         
         $stmt = $conn->prepare($query);
-        $stmt->bindValue(':id', $consultationId);
+        $stmt->bindValue(':id', $consultationid);
         $stmt->execute();
         $Pinspection = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if($stmt->rowCount() === 0){
+            http_response_code(400);
+            echo json_encode(["Bad Request"]);
+        }
         foreach ($Pinspection as $inspection)
         {
             $query = "SELECT name FROM doctor WHERE id = :id";

@@ -102,7 +102,7 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
     $page = $_GET['page'] ?? 1; 
     $size = $_GET['size'] ?? 10; 
     $flag=true; 
-    
+
     if($_GET['icdRoots']!= '' && $_GET['icdRoots']!= "null"){ 
         $roots = explode(',', $_GET['icdRoots']); 
         $flag=true; 
@@ -154,7 +154,8 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
     $stmt = $conn->prepare('SELECT inspectionId FROM consultation'); 
     $stmt->execute(); 
     $cons = $stmt->fetchAll(PDO::FETCH_ASSOC); 
-    function getInspectionChain($inspectionId, $conn, $filtered) { 
+    $chosen=[];
+    function getInspectionChain($inspectionId, $conn, $filtered, $chosen) { 
  
         $query = "SELECT i.*  
         FROM inspection i  
@@ -261,17 +262,28 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
  
             $inspections[] = $inspectionData; 
              
-            foreach($nests as $nest) 
-            { 
-                $inspections = array_merge($inspections, getInspectionChain( $nest['id'], $conn, $filtered)); 
-            } 
-            return $inspections; 
-        } else { 
-            http_response_code(400); 
-            echo json_encode(["Bad Request"]); 
-        } 
+            foreach($nests as $nest)
+            {
+                if(!in_array($inspection['id'], $chosen)){
+                    $chosen[]= $nest['id'];
+                    if(getInspectionChain( $nest['id'], $conn, $filtered, $chosen)==null){
+                        return $inspections;
+                    }
+                    $inspections = array_merge($inspections, getInspectionChain( $nest['id'], $conn, $filtered, $chosen));
+                }
+            }
+            if(!is_null($inspection["previousinspectionid"]) && !in_array($inspection['id'], $chosen))
+            {
+                $chosen[]= $inspection['id'];
+                if(getInspectionChain( $inspection["previousinspectionid"], $conn,  $filtered, $chosen)==null){
+                    return $inspections;
+                }
+                $inspections = array_merge($inspections, getInspectionChain( $inspection["previousinspectionid"], $conn,  $filtered, $chosen));
+            }
+            return $inspections;
+        }
     } 
-    foreach($cons as $consultationId){ 
+    foreach($cons as $consultationid){ 
         if($grouped) 
         { 
             $query = "SELECT i.*  
@@ -280,12 +292,17 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
             "; 
  
             if (!empty($filtered)) { 
- 
+
                 $query .= "JOIN diagnos d ON i.id = d.inspectionid "; 
             } 
  
-            $query .= "WHERE i.id=:id AND i.previousinspectionid IS NULL "; 
+            $query .= "WHERE i.id=:id "; 
+
+            if (!empty($chosen)) { 
  
+                $query .= "AND i.id NOT IN (:chosen) "; 
+            } 
+
             if (!empty($filtered)) { 
  
                 $query .= "AND d.id IN (:icdIds)"; 
@@ -296,14 +313,17 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
             if (!empty($filtered)) { 
                 $query = str_replace(':icdIds', implode(', ', $filteredWithQuotes), $query); 
             } 
+            if (!empty($chosen)) { 
+                $query = str_replace(':chosen', implode(', ', $chosen), $query); 
+            } 
  
             $stmt = $conn->prepare($query); 
-            $stmt->bindValue(':id', $consultationId['inspectionid']); 
+            $stmt->bindValue(':id', $consultationid['inspectionid']); 
             $stmt->execute(); 
             $inspection = $stmt->fetch(PDO::FETCH_ASSOC); 
             if($stmt->rowCount() > 0){ 
-                $inspections = getInspectionChain($inspection['id'], $conn, $filtered); 
-            } 
+                $inspections = getInspectionChain($inspection['id'], $conn, $filtered, $chosen); 
+            }
         } 
  
         else{ 
@@ -313,7 +333,7 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
             "; 
  
             if (!empty($filtered)) {
-$query .= "JOIN diagnos d ON i.id = d.inspectionid "; 
+                $query .= "JOIN diagnos d ON i.id = d.inspectionid "; 
             } 
  
             $query .= "WHERE i.id = :id "; 
@@ -330,7 +350,7 @@ $query .= "JOIN diagnos d ON i.id = d.inspectionid ";
             } 
              
             $stmt = $conn->prepare($query); 
-            $stmt->bindValue(':id', $consultationId['inspectionid']); 
+            $stmt->bindValue(':id', $consultationid['inspectionid']); 
             $stmt->execute(); 
             $Pinspection = $stmt->fetchAll(PDO::FETCH_ASSOC); 
             foreach ($Pinspection as $inspection) 
