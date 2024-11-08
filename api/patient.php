@@ -157,11 +157,12 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     $inspections = [];
     $request = $_GET['request'];
     if(isset($request)){
+
         $query = "SELECT DISTINCT i.*, ic.mkb_code, ic.mkb_name
         FROM inspection i
         JOIN diagnos d ON i.id = d.inspectionid
         JOIN icd10 ic ON d.icdDiagnosisid = ic.id
-        WHERE patientid=:patientid AND i.previousinspectionid IS NULL
+        WHERE patientid=:patientid
         AND (ic.mkb_code ILIKE :icd_part OR ic.mkb_name ILIKE :icd_part) ";
 
         $stmt = $conn->prepare($query);
@@ -169,53 +170,62 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         $stmt->bindValue(':patientid', $consultationId);
         $stmt->execute();
         $Pinspection = $stmt->fetchAll(PDO::FETCH_ASSOC); 
-
         foreach ($Pinspection as $inspection)
         {
-            $query = "SELECT name FROM doctor WHERE id = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $inspection['author']);
-            $stmt->execute();
-            $doctor = $stmt->fetch(PDO::FETCH_ASSOC);
+            $query = "SELECT i.*
+            FROM inspection i
+            WHERE previousinspectionId=:id";
     
-            $query = "SELECT name FROM patient WHERE id = :id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindValue(':id', $inspection['patientid']);
-            $stmt->execute();
-            $patient = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-            $query = "SELECT id,icdDiagnosisID,description,type,createtime FROM diagnos WHERE inspectionid = :id";
             $stmt = $conn->prepare($query);
             $stmt->bindValue(':id', $inspection['id']);
             $stmt->execute();
-            $diagnoses = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-            $Dresponses=[];
-            foreach ($diagnoses as $diagnos)
-            {
-                $query = "SELECT mkb_code,mkb_name FROM icd10 WHERE id = :id";
+            if($stmt->rowCount()==0){
+                $Pinspection = $stmt->fetchAll(PDO::FETCH_ASSOC); 
+                $query = "SELECT name FROM doctor WHERE id = :id";
                 $stmt = $conn->prepare($query);
-                $stmt->bindValue(':id', $diagnos['icddiagnosisid']);
+                $stmt->bindValue(':id', $inspection['author']);
                 $stmt->execute();
-                $icd = $stmt ->fetch(PDO::FETCH_ASSOC);
-                $Dresponse = [
-                    "id" => $diagnos["id"],
-                    "createTime" => $diagnos["createtime"],
-                    "code" => $icd["mkb_code"],
-                    "name" => $icd["mkb_name"],
-                    "description" => $diagnos["description"],
-                    "type" => $diagnos["type"],
-                ];
-                $Dresponses[] = $Dresponse;
-            }
+                $doctor = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+                $query = "SELECT name FROM patient WHERE id = :id";
+                $stmt = $conn->prepare($query);
+                $stmt->bindValue(':id', $inspection['patientid']);
+                $stmt->execute();
+                $patient = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+                $query = "SELECT id,icdDiagnosisID,description,type,createtime FROM diagnos WHERE inspectionid = :id";
+                $stmt = $conn->prepare($query);
+                $stmt->bindValue(':id', $inspection['id']);
+                $stmt->execute();
+                $diagnoses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+                $Dresponses=[];
+                foreach ($diagnoses as $diagnos)
+                {
+                    $query = "SELECT mkb_code,mkb_name FROM icd10 WHERE id = :id";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bindValue(':id', $diagnos['icddiagnosisid']);
+                    $stmt->execute();
+                    $icd = $stmt ->fetch(PDO::FETCH_ASSOC);
+                    $Dresponse = [
+                        "id" => $diagnos["id"],
+                        "createTime" => $diagnos["createtime"],
+                        "code" => $icd["mkb_code"],
+                        "name" => $icd["mkb_name"],
+                        "description" => $diagnos["description"],
+                        "type" => $diagnos["type"],
+                    ];
+                    $Dresponses[] = $Dresponse;
+                }
 
-            $inspectionData = [
-                "id" => $inspection["id"],
-                "createTime" => $inspection["createtime"],
-                "date" => $inspection["date"],
-                "diagnosis" => $Dresponses,
-            ];
-            $inspections[] = $inspectionData;
+                $inspectionData = [
+                    "id" => $inspection["id"],
+                    "createTime" => $inspection["createtime"],
+                    "date" => $inspection["date"],
+                    "diagnosis" => $Dresponses,
+                ];
+                $inspections[] = $inspectionData;
+            }
         }
     }
     http_response_code(200);
@@ -243,7 +253,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     $page = $_GET['page'] ?? 1;
     $size = $_GET['size'] ?? 10;
     $flag=true;
-    if($_GET['icdRoots']!= ''){
+    if($_GET['icdRoots']!= '' && $_GET['icdRoots']!= "null"){ 
         $roots = explode(',', $_GET['icdRoots']);
         $flag=true;
     }else {$roots = [null]; $flag=false;}

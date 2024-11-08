@@ -102,7 +102,8 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
     $page = $_GET['page'] ?? 1; 
     $size = $_GET['size'] ?? 10; 
     $flag=true; 
-    if($_GET['icdRoots']!= ''){ 
+    
+    if($_GET['icdRoots']!= '' && $_GET['icdRoots']!= "null"){ 
         $roots = explode(',', $_GET['icdRoots']); 
         $flag=true; 
     }else {$roots = [null]; $flag=false;} 
@@ -149,7 +150,6 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
         return "'$value'";  
     }, $filtered); 
     $filtered=$filteredWithQuotes; 
-    echo json_encode($filtered); 
     $inspections = []; 
     $stmt = $conn->prepare('SELECT inspectionId FROM consultation'); 
     $stmt->execute(); 
