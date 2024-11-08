@@ -29,10 +29,10 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
         exit;
         }
     }
-    $consultationid=$matches[1];
+    $patientid=$matches[1];
     $query = "SELECT id,createtime,inspectionid,specialityid FROM consultation WHERE id = :id";
     $stmt = $conn->prepare($query);
-    $stmt->bindValue(':id', $consultationid);
+    $stmt->bindValue(':id', $patientid);
     $stmt->execute();
     if ($stmt->rowCount() === 0) {
         http_response_code(400);
@@ -283,7 +283,7 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
             return $inspections;
         }
     } 
-    foreach($cons as $consultationid){ 
+    foreach($cons as $patientid){ 
         if($grouped) 
         { 
             $query = "SELECT i.*  
@@ -318,7 +318,7 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
             } 
  
             $stmt = $conn->prepare($query); 
-            $stmt->bindValue(':id', $consultationid['inspectionid']); 
+            $stmt->bindValue(':id', $patientid['inspectionid']); 
             $stmt->execute(); 
             $inspection = $stmt->fetch(PDO::FETCH_ASSOC); 
             if($stmt->rowCount() > 0){ 
@@ -350,7 +350,7 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
             } 
              
             $stmt = $conn->prepare($query); 
-            $stmt->bindValue(':id', $consultationid['inspectionid']); 
+            $stmt->bindValue(':id', $patientid['inspectionid']); 
             $stmt->execute(); 
             $Pinspection = $stmt->fetchAll(PDO::FETCH_ASSOC); 
             foreach ($Pinspection as $inspection) 
@@ -465,11 +465,11 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
         echo json_encode(['Invalid arguments']);
         exit;
     }
-    $consultationid=$matches[1];
+    $patientid=$matches[1];
 
     $query = "SELECT inspectionid, specialityid FROM consultation WHERE id = :consultationid";
     $stmt = $conn->prepare($query);
-    $stmt->bindValue(':consultationid', $consultationid);
+    $stmt->bindValue(':consultationid', $patientid);
     $stmt->execute();
     $author = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -491,7 +491,7 @@ if (preg_match('/\/api\/consultation\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_
         $stmt = $conn->prepare($query);
         $stmt->bindValue(':id', $Commid);
         $stmt->bindValue(':parentid', $data['parentId']);
-        $stmt->bindValue(':consultationid', $consultationid);
+        $stmt->bindValue(':consultationid', $patientid);
         $stmt->bindValue(':author', $user['id']);
         $stmt->bindValue(':content', $data['content']);
         $stmt->bindValue(':createtime', $createdAt);

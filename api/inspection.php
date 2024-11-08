@@ -185,6 +185,36 @@ if (preg_match('/\/api\/inspection\.php\/([0-9a-f\-]+)$/i', $_SERVER['REQUEST_UR
         echo json_encode(['Invalid arguments']);
         exit;
     }
+    if (($data['conclusion'] =='Death') && ($data['nextVisitDate']!=null)) {
+        http_response_code(400);
+        echo json_encode(['Bad request']);
+        exit;
+    }
+    if (($data['conclusion'] =='Death') && ($data['deathDate']=='null')) {
+        http_response_code(400);
+        echo json_encode(['Bad request']);
+        exit;
+    }
+    $counter = 0;
+    foreach ($data['diagnoses'] as $diagnos)
+    {
+        if($diagnos['type']!='Main' && $diagnos['type']!='Concomitant' && $diagnos['type']!='Complication')
+        {
+            http_response_code(400);
+            echo json_encode(['Invalid arguments']);
+            exit;
+        }
+        if($diagnos['type']=='Main')
+        {
+            $counter++;
+        }
+        if ($counter>1)
+        {
+            http_response_code(400);
+            echo json_encode(['Invalid arguments']);
+            exit;
+        }
+    }
     $createdAt = date('Y-m-d\TH:i:s.u\Z');
     
     $query = "SELECT * FROM inspection WHERE id = :id";

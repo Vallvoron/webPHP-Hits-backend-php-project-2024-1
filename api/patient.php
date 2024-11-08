@@ -32,11 +32,11 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     }
 
     $createdAt = date('Y-m-d\TH:i:s.u\Z');
-    $consultationid = uniqid(); 
+    $patientid = uniqid(); 
 
     $query = "INSERT INTO patient (id, name, birthday, gender, createTime) VALUES (:id, :name, :birthday, :gender, :createTime)";
     $stmt = $conn->prepare($query);
-    $stmt->bindValue(':id', $consultationid);
+    $stmt->bindValue(':id', $patientid);
     $stmt->bindValue(':name', $data['name']);
     $stmt->bindValue(':birthday', $data['birthday']);
     $stmt->bindValue(':gender', $data['gender']);
@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
 
     header('Content-type: application/json');
     http_response_code(200);
-    echo json_encode(["Patient was registered" => $consultationid]);
+    echo json_encode(["Patient was registered" => $patientid]);
 } elseif (preg_match('/\/api\/patient\.php\/([0-9a-f\-]+)\/inspections$/i', $_SERVER['REQUEST_URI'], $matches) && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (true){
         $headers = getallheaders();
@@ -64,7 +64,47 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         }
     }
     $data = json_decode(file_get_contents('php://input'), true);
-    $consultationid=$matches[1];
+    if (!isset($data['date'], $data['anamnesis'], $data['complaints'], $data['treatment'], $data['diagnoses'], $data['conclusion'])) {
+        http_response_code(400);
+        echo json_encode(['Bad request']);
+        exit;
+    }
+    if (($data['conclusion'] !='Disease') && ($data['conclusion'] !='Recovery') && ($data['conclusion'] !='Death')) {
+        http_response_code(400);
+        echo json_encode(['Bad request']);
+        exit;
+    }
+    if (($data['conclusion'] =='Death') && ($data['nextVisitDate']!=null)) {
+        http_response_code(400);
+        echo json_encode(['Bad request']);
+        exit;
+    }
+    if (($data['conclusion'] =='Death') && ($data['deathDate']=='null')) {
+        http_response_code(400);
+        echo json_encode(['Bad request']);
+        exit;
+    }
+    $counter = 0;
+    foreach ($data['diagnoses'] as $diagnos)
+    {
+        if($diagnos['type']!='Main' && $diagnos['type']!='Concomitant' && $diagnos['type']!='Complication')
+        {
+            http_response_code(400);
+            echo json_encode(['Bad Request']);
+            exit;
+        }
+        if($diagnos['type']=='Main')
+        {
+            $counter++;
+        }
+        if ($counter>1)
+        {
+            http_response_code(400);
+            echo json_encode(['Bad Request']);
+            exit;
+        }
+    }
+    $patientid=$matches[1];
     $headers = getallheaders();
     $token = "";
     if (isset($headers['Authorization'])) {
@@ -84,7 +124,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
 
     $query = "SELECT FROM patient WHERE id=:patientid";
     $stmt = $conn->prepare($query);
-    $stmt->bindValue(':patientid', $consultationid);
+    $stmt->bindValue(':patientid', $patientid);
     $stmt->execute();
     if($stmt->rowCount() === 0)
     {
@@ -108,7 +148,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
     $stmt = $conn->prepare($query);
     $stmt->bindValue(':id', $id);
     $stmt->bindValue(':createtime', $createdAt);
-    $stmt->bindValue(':patientid', $consultationid);
+    $stmt->bindValue(':patientid', $patientid);
     $stmt->bindValue(':date', $data['date']);
     $stmt->bindValue(':anamnesis', $data['anamnesis']);
     $stmt->bindValue(':complaints', $data['complaints']);
@@ -179,7 +219,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         exit;
         }
     }
-    $consultationid = $matches[1];
+    $patientid = $matches[1];
     $inspections = [];
     $request = $_GET['request'];
     if(isset($request)){
@@ -193,7 +233,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
 
         $stmt = $conn->prepare($query);
         $stmt->bindValue(':icd_part', '%' . $request . '%');
-        $stmt->bindValue(':patientid', $consultationid);
+        $stmt->bindValue(':patientid', $patientid);
         $stmt->execute();
         $Pinspection = $stmt->fetchAll(PDO::FETCH_ASSOC); 
         foreach ($Pinspection as $inspection)
@@ -322,7 +362,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
             $filtered[]=null;
         }
     }
-    $consultationid = $matches[1];
+    $patientid = $matches[1];
     $inspections = [];
     $chosen=[];
     function getInspectionChain($inspectionId, $conn, $patientId, $filtered, $chosen) {
@@ -483,11 +523,11 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         }
 
         $stmt = $conn->prepare($query);
-        $stmt->bindValue(':id', $consultationid);
+        $stmt->bindValue(':id', $patientid);
         $stmt->execute();
         $inspection = $stmt->fetch(PDO::FETCH_ASSOC);
         if($stmt->rowCount() > 0){
-            $inspections = getInspectionChain($inspection['id'], $conn, $consultationid, $filtered, $chosen);
+            $inspections = getInspectionChain($inspection['id'], $conn, $patientid, $filtered, $chosen);
         }else {
             http_response_code(400);
             echo json_encode(["Bad Request"]);
@@ -522,7 +562,7 @@ if ($_SERVER['REQUEST_URI'] === '/api/patient.php' && $_SERVER['REQUEST_METHOD']
         }
         
         $stmt = $conn->prepare($query);
-        $stmt->bindValue(':id', $consultationid);
+        $stmt->bindValue(':id', $patientid);
         $stmt->execute();
         $Pinspection = $stmt->fetchAll(PDO::FETCH_ASSOC);
         if($stmt->rowCount() === 0){
